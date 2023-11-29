@@ -26,6 +26,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <string>
 
 using namespace dealii;
 
@@ -36,7 +37,7 @@ class Poisson3D
 {
 public:
   // Physical dimension (1D, 2D, 3D)
-  static constexpr unsigned int dim = 2;
+  static constexpr unsigned int dim = 3;
 
   // Diffusion coefficient.
   // In deal.ii, functions are implemented by deriving the dealii::Function
@@ -53,7 +54,8 @@ public:
     virtual double
     value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
     {
-      return 1.0;
+      
+      return p[0] < 0.5 ? 100.0 : 1;
     }
   };
 
@@ -67,47 +69,30 @@ public:
 
     // Evaluation.
     virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
+    value(const Point<dim> /*&p*/, const unsigned int /*component*/ = 0) const
     {
-      return -5.0;
+      return 1.0;
     }
   };
 
-  // Dirichlet boundary conditions.
-  class FunctionG : public Function<dim>
+  class ReactionCoefficient : public Function<dim>
   {
   public:
     // Constructor.
-    FunctionG()
+    ReactionCoefficient()
     {}
 
     // Evaluation.
     virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
+    value(const Point<dim> /*&p*/, const unsigned int /*component*/ = 0) const
     {
-      return p[0] + p[1];
-    }
-  };
-
-  // Neumann boundary conditions.
-  class FunctionH : public Function<dim>
-  {
-  public:
-    // Constructor.
-    FunctionH()
-    {}
-
-    // Evaluation:
-    virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
-    {
-      return p[1];
+      return 1.0;
     }
   };
 
   // Constructor.
-  Poisson3D(const unsigned int &N_, const unsigned int &r_)
-    : N(N_)
+  Poisson3D(const std::string mesh_file_name_, const unsigned int &r_)
+    : mesh_file_name(mesh_file_name_)
     , r(r_)
   {}
 
@@ -128,8 +113,8 @@ public:
   output() const;
 
 protected:
-  // N+1 is the number of elements.
-  const unsigned int N;
+  // Path to the mesh file.
+  const std::string mesh_file_name;
 
   // Polynomial degree.
   const unsigned int r;
@@ -137,14 +122,13 @@ protected:
   // Diffusion coefficient.
   DiffusionCoefficient diffusion_coefficient;
 
+  // Reaction coefficient.
+  ReactionCoefficient reaction_coefficient;
+
+  Functions::ZeroFunction<dim> bc_function;
+
   // Forcing term.
   ForcingTerm forcing_term;
-
-  // g(x).
-  FunctionG function_g;
-
-  // h(x).
-  FunctionH function_h;
 
   // Triangulation.
   Triangulation<dim> mesh;

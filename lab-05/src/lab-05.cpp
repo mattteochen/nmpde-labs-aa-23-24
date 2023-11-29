@@ -1,5 +1,3 @@
-#include <deal.II/base/convergence_table.h>
-
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -10,10 +8,11 @@
 int
 main(int /*argc*/, char * /*argv*/[])
 {
-  const unsigned int N = 19;
+  const std::string mesh_file_name =
+    "../mesh/mesh-cube-5.msh";
   const unsigned int r = 1;
 
-  Poisson3D problem(N, r);
+  Poisson3D problem(mesh_file_name, r);
 
   problem.setup();
   problem.assemble();

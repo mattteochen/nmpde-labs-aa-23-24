@@ -1,4 +1,6 @@
 #include "Poisson3D.hpp"
+#include <deal.II/base/function.h>
+#include <filesystem>
 
 void
 Poisson3D::setup()
@@ -7,26 +9,17 @@ Poisson3D::setup()
 
   // Create the mesh.
   {
-    std::cout << "Initializing the mesh" << std::endl;
-    GridGenerator::subdivided_hyper_cube(mesh, N + 1, 0.0, 1.0, true);
-    GridGenerator::convert_hypercube_to_simplex_mesh(mesh, mesh);
+    std::cout << "Initializing the mesh from " << mesh_file_name << std::endl;
 
     // Or read the mesh from file:
-    // GridIn<dim> grid_in;
-    // grid_in.attach_triangulation(mesh);
+    GridIn<dim> grid_in;
+    grid_in.attach_triangulation(mesh);
 
-    // std::ifstream mesh_file("../scripts/mesh.msh");
-    // grid_in.read_msh(mesh_file);
+    std::ifstream mesh_file(mesh_file_name);
+    grid_in.read_msh(mesh_file);
 
     std::cout << "  Number of elements = " << mesh.n_active_cells()
               << std::endl;
-
-    // Write the mesh to file.
-    const std::string mesh_file_name = "mesh-" + std::to_string(N + 1) + ".vtk";
-    GridOut           grid_out;
-    std::ofstream     grid_out_file(mesh_file_name);
-    grid_out.write_vtk(mesh, grid_out_file);
-    std::cout << "  Mesh saved to " << mesh_file_name << std::endl;
   }
 
   std::cout << "-----------------------------------------------" << std::endl;
@@ -129,15 +122,6 @@ Poisson3D::assemble()
     update_values | update_gradients | update_quadrature_points |
       update_JxW_values);
 
-  // Since we need to compute integrals on the boundary for Neumann conditions,
-  // we also need a FEValues object to compute quantities on boundary edges
-  // (faces).
-  FEFaceValues<dim> fe_values_boundary(*fe,
-                                       *quadrature_boundary,
-                                       update_values |
-                                         update_quadrature_points |
-                                         update_JxW_values);
-
   // Local matrix and right-hand side vector. We will overwrite them for
   // each element within the loop.
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -183,41 +167,18 @@ Poisson3D::assemble()
                                        * fe_values.shape_grad(i, q)     // (I)
                                        * fe_values.shape_grad(j, q)     // (II)
                                        * fe_values.JxW(q);              // (III)
+
+                  cell_matrix(i, j) += reaction_coefficient.value(
+                                         fe_values.quadrature_point(q)) // sigma
+                                       * fe_values.shape_value(i, q)     // v
+                                       * fe_values.shape_value(j, q)     // u
+                                       * fe_values.JxW(q);
                 }
 
               cell_rhs(i) += forcing_term.value(fe_values.quadrature_point(q)) *
                              fe_values.shape_value(i, q) * fe_values.JxW(q);
             }
         }
-
-      // If the cell is adjacent to the boundary...
-      if (cell->at_boundary())
-        {
-          // ...we loop over its edges (referred to as faces in the deal.II
-          // jargon).
-          for (unsigned int face_number = 0; face_number < cell->n_faces();
-               ++face_number)
-            {
-              // If current face lies on the boundary, and its boundary ID (or
-              // tag) is that of one of the Neumann boundaries, we assemble the
-              // boundary integral.
-              if (cell->face(face_number)->at_boundary() &&
-                  (cell->face(face_number)->boundary_id() == 2 ||
-                   cell->face(face_number)->boundary_id() == 3))
-                {
-                  fe_values_boundary.reinit(cell, face_number);
-
-                  for (unsigned int q = 0; q < quadrature_boundary->size(); ++q)
-                    for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                      cell_rhs(i) +=
-                        function_h.value(
-                          fe_values_boundary.quadrature_point(q)) * // h(xq)
-                        fe_values_boundary.shape_value(i, q) *      // v(xq)
-                        fe_values_boundary.JxW(q);                  // Jq wq
-                }
-            }
-        }
-
 
       // At this point the local matrix and vector are constructed: we
       // need to sum them into the global matrix and vector. To this end,
@@ -241,8 +202,12 @@ Poisson3D::assemble()
     // Then, we build a map that, for each boundary tag, stores the
     // corresponding boundary function.
     std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-    boundary_functions[0] = &function_g;
-    boundary_functions[1] = &function_g;
+    boundary_functions[0] = &bc_function;
+    boundary_functions[1] = &bc_function;
+    boundary_functions[2] = &bc_function;
+    boundary_functions[3] = &bc_function;
+    boundary_functions[4] = &bc_function;
+    boundary_functions[5] = &bc_function;
 
     // interpolate_boundary_values fills the boundary_values map.
     VectorTools::interpolate_boundary_values(dof_handler,
@@ -297,8 +262,9 @@ Poisson3D::output() const
 
   // Then, use one of the many write_* methods to write the file in an
   // appropriate format.
-  const std::string output_file_name =
-    "output-" + std::to_string(N + 1) + ".vtk";
+  const std::filesystem::path mesh_path(mesh_file_name);
+  const std::string           output_file_name =
+    "output-" + mesh_path.stem().string() + ".vtk";
   std::ofstream output_file(output_file_name);
   data_out.write_vtk(output_file);
 
