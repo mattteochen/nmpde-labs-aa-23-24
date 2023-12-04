@@ -1,5 +1,5 @@
-#ifndef POISSON_1D_HPP
-#define POISSON_1D_HPP
+#ifndef POISSON_3D_HPP
+#define POISSON_3D_HPP
 
 #include <deal.II/base/quadrature_lib.h>
 
@@ -8,6 +8,7 @@
 
 #include <deal.II/fe/fe_simplex_p.h>
 #include <deal.II/fe/fe_values.h>
+#include <deal.II/fe/mapping_fe.h>
 
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_in.h>
@@ -17,6 +18,7 @@
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/vector.h>
 
@@ -24,6 +26,7 @@
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 
@@ -36,7 +39,7 @@ class Poisson3D
 {
 public:
   // Physical dimension (1D, 2D, 3D)
-  static constexpr unsigned int dim = 2;
+  static constexpr unsigned int dim = 3;
 
   // Diffusion coefficient.
   // In deal.ii, functions are implemented by deriving the dealii::Function
@@ -51,7 +54,28 @@ public:
 
     // Evaluation.
     virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
+    value(const Point<dim> &p,
+          const unsigned int /*component*/ = 0) const override
+    {
+      if (p[0] < 0.5)
+        return 100.0;
+      else
+        return 1.0;
+    }
+  };
+
+  // Reaction coefficient.
+  class ReactionCoefficient : public Function<dim>
+  {
+  public:
+    // Constructor.
+    ReactionCoefficient()
+    {}
+
+    // Evaluation.
+    virtual double
+    value(const Point<dim> & /*p*/,
+          const unsigned int /*component*/ = 0) const override
     {
       return 1.0;
     }
@@ -67,9 +91,10 @@ public:
 
     // Evaluation.
     virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
+    value(const Point<dim> & /*p*/,
+          const unsigned int /*component*/ = 0) const override
     {
-      return -5.0;
+      return 1.0;
     }
   };
 
@@ -83,31 +108,16 @@ public:
 
     // Evaluation.
     virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
+    value(const Point<dim> & /*p*/,
+          const unsigned int /*component*/ = 0) const override
     {
-      return p[0] + p[1];
-    }
-  };
-
-  // Neumann boundary conditions.
-  class FunctionH : public Function<dim>
-  {
-  public:
-    // Constructor.
-    FunctionH()
-    {}
-
-    // Evaluation:
-    virtual double
-    value(const Point<dim> &p, const unsigned int /*component*/ = 0) const
-    {
-      return p[1];
+      return 0.0;
     }
   };
 
   // Constructor.
-  Poisson3D(const unsigned int &N_, const unsigned int &r_)
-    : N(N_)
+  Poisson3D(const std::string &mesh_file_name_, const unsigned int &r_)
+    : mesh_file_name(mesh_file_name_)
     , r(r_)
   {}
 
@@ -128,8 +138,8 @@ public:
   output() const;
 
 protected:
-  // N+1 is the number of elements.
-  const unsigned int N;
+  // Path to the mesh file.
+  const std::string mesh_file_name;
 
   // Polynomial degree.
   const unsigned int r;
@@ -137,14 +147,14 @@ protected:
   // Diffusion coefficient.
   DiffusionCoefficient diffusion_coefficient;
 
+  // Reaction coefficient.
+  ReactionCoefficient reaction_coefficient;
+
   // Forcing term.
   ForcingTerm forcing_term;
 
   // g(x).
   FunctionG function_g;
-
-  // h(x).
-  FunctionH function_h;
 
   // Triangulation.
   Triangulation<dim> mesh;
@@ -160,9 +170,6 @@ protected:
   // We use a unique_ptr here so that we can choose the type and order of the
   // quadrature formula at runtime (the order is a constructor parameter).
   std::unique_ptr<Quadrature<dim>> quadrature;
-
-  // Quadrature formula used on boundary lines.
-  std::unique_ptr<Quadrature<dim - 1>> quadrature_boundary;
 
   // DoF handler.
   DoFHandler<dim> dof_handler;
