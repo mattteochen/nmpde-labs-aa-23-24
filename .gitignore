@@ -340,3 +340,9 @@ TSWLatexianTemp*
 #*Notes.bib
 
 *.pdf
+
+# MacOS
+**/.DS_Store
+
+# Clangd
+**/compile_commands.json
